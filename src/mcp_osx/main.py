@@ -12,7 +12,10 @@ from . import fallback
 
 
 # Initialize FastMCP server
-mcp = FastMCP(name="macOS_GUI_Control")
+mcp = FastMCP(
+    name="macOS_GUI_Control",
+    description="A tool for controlling the macOS GUI, including listing and interacting with UI elements in running applications."
+)
 
 
 def check_permissions_on_startup():
@@ -29,8 +32,10 @@ def check_permissions_on_startup():
     
     print("Note: Some apps may require 'Allow Apple Events' in System Settings → Privacy & Security → Automation")
 
-
-@mcp.tool()
+@mcp.tool(
+    title="List UI Elements",
+    description="Return the UI element hierarchy of the specified app window."
+)
 def list_elements(app_name: str, window: str = None) -> dict:
     """
     Return the UI element hierarchy of the specified app window.
@@ -52,7 +57,10 @@ def list_elements(app_name: str, window: str = None) -> dict:
         return {"error": error_msg}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Press UI Element",
+    description="Press (click) the specified UI element in the given application."
+)
 def press_element(app_name: str, element_id: str) -> bool:
     """
     Press (click) the specified UI element in the given application.
@@ -108,11 +116,14 @@ def press_element(app_name: str, element_id: str) -> bool:
     except Exception as e:
         print(f"  PyAutoGUI failed: {e}")
     
-    print(f"✗ Failed to press '{element_id}' in '{app}' using all methods")
+    print(f"✗ Failed to press '{element_id}' in '{app_name}' using all methods")
     return False
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Enter Text",
+    description="Enter text into the specified UI element in the given application."
+)
 def enter_text(app_name: str, element_id: str, text: str) -> bool:
     """
     Enter text into the specified UI element in the given application.
@@ -174,7 +185,10 @@ def enter_text(app_name: str, element_id: str, text: str) -> bool:
     return False
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Read Value",
+    description="Read the value from the specified UI element in the given application."
+)
 def read_value(app_name: str, element_id: str) -> str:
     """
     Read the value from the specified UI element in the given application.
@@ -221,7 +235,10 @@ def read_value(app_name: str, element_id: str) -> str:
     return error_msg
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Scroll",
+    description="Scroll in the specified direction within the given application."
+)
 def scroll(app_name: str, direction: str, amount: int = 3) -> bool:
     """
     Scroll in the specified direction within the given application.
@@ -270,7 +287,10 @@ def scroll(app_name: str, direction: str, amount: int = 3) -> bool:
     return False
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Get App Info",
+    description="Get information about a running application."
+)
 def get_app_info(app_name: str) -> dict:
     """
     Get information about a running application.
@@ -291,7 +311,11 @@ def get_app_info(app_name: str) -> dict:
         return {"error": error_msg}
 
 
-@mcp.tool()
+@mcp.resource(
+    "mcp_osx://apps",
+    title="List Running Apps",
+    description="List all currently running applications that can be controlled."
+)
 def list_running_apps() -> dict:
     """
     List all currently running applications that can be controlled.
@@ -309,7 +333,10 @@ def list_running_apps() -> dict:
         return {"error": error_msg}
 
 
-@mcp.tool()
+@mcp.tool(
+    title="Check Permissions",
+    description="Check the current status of required macOS permissions."
+)
 def check_permissions() -> dict:
     """
     Check the current status of required macOS permissions.
@@ -332,7 +359,6 @@ def check_permissions() -> dict:
     
     return result
 
-
 def main():
     """Main entry point for the MCP server."""
     print("🚀 Starting MCP macOS GUI Control Server")
@@ -341,7 +367,8 @@ def main():
     # Check permissions on startup
     check_permissions_on_startup()
     
-    print("\n📋 Available MCP Tools:")
+    print("
+📋 Available MCP Tools:")
     print("  • list_elements(app_name, window) - List UI elements")
     print("  • press_element(app_name, element_id) - Click/press element")
     print("  • enter_text(app_name, element_id, text) - Enter text")
@@ -351,7 +378,8 @@ def main():
     print("  • list_running_apps() - List all running applications")
     print("  • check_permissions() - Check macOS permissions")
     
-    print("\n🔗 MCP Server starting...")
+    print("
+🔗 MCP Server starting...")
     print("Connect your MCP client to this server to control macOS GUI applications!")
     print("=" * 50)
     
