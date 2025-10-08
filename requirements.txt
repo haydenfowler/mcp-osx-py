@@ -1,0 +1,4 @@
+mcp
+atomacos
+pyautogui
+pyobjc-framework-Quartz
