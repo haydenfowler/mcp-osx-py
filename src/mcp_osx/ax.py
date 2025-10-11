@@ -107,8 +107,8 @@ def list_elements(bundle_id: str = None) -> Dict[str, Any]:
         
         def element_to_dict(element: atomacos.NativeUIElement, depth: int = 0) -> Dict[str, Any]:
             # """Recursively convert element to dictionary."""
-            # if depth > 10:  # Prevent infinite recursion
-            #     return {"error": "Max depth reached"}
+            if depth > 10:  # Prevent infinite recursion
+                return {"error": "Max depth reached"}
             
             try:
                 element_dict = {

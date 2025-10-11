@@ -6,7 +6,7 @@ Each tool uses a three-tier automation strategy: AppleScript → Accessibility A
 """
 
 from mcp.server.fastmcp import FastMCP
-from . import applescript
+# from . import applescript
 from . import ax
 from . import fallback
 
@@ -89,12 +89,12 @@ def press_element(bundle_id: str = None, element_id: str = None) -> bool:
     print(f"Attempting to press element '{element_id}' in '{bundle_id}'...")
     
     # Layer 1: AppleScript
-    try:
-        if applescript.press_element(bundle_id=bundle_id, element_id=element_id):
-            print(f"✓ AppleScript: pressed '{element_id}' in '{bundle_id}'")
-            return True
-    except Exception as e:
-        print(f"  AppleScript failed: {e}")
+    # try:
+    #     if applescript.press_element(bundle_id=bundle_id, element_id=element_id):
+    #         print(f"✓ AppleScript: pressed '{element_id}' in '{bundle_id}'")
+    #         return True
+    # except Exception as e:
+    #     print(f"  AppleScript failed: {e}")
     
     # Layer 2: Accessibility API
     try:
@@ -140,8 +140,6 @@ def enter_text(bundle_id: str = None, element_id: str = None, text: str = None) 
     """
     Enter text into the specified UI element in the given application.
     
-    Uses three-tier automation: AppleScript → Accessibility API → PyAutoGUI fallback.
-    
     Args:
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         element_id: Element identifier, title, or description
@@ -153,12 +151,12 @@ def enter_text(bundle_id: str = None, element_id: str = None, text: str = None) 
     print(f"Attempting to enter text '{text}' into element '{element_id}' in '{bundle_id}'...")
     
     # Layer 1: AppleScript
-    try:
-        if applescript.enter_text(bundle_id=bundle_id, element_id=element_id, text=text):
-            print(f"✓ AppleScript: entered text into '{element_id}'")
-            return True
-    except Exception as e:
-        print(f"  AppleScript failed: {e}")
+    # try:
+    #     if applescript.enter_text(bundle_id=bundle_id, element_id=element_id, text=text):
+    #         print(f"✓ AppleScript: entered text into '{element_id}'")
+    #         return True
+    # except Exception as e:
+    #     print(f"  AppleScript failed: {e}")
     
     # Layer 2: Accessibility API
     try:
@@ -204,9 +202,7 @@ def enter_text(bundle_id: str = None, element_id: str = None, text: str = None) 
 def read_value(bundle_id: str = None, element_id: str = None) -> str:
     """
     Read the value from the specified UI element in the given application.
-    
-    Uses two-tier approach: AppleScript → Accessibility API (PyAutoGUI cannot read values).
-    
+        
     Args:
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         element_id: Element identifier, title, or description
@@ -217,15 +213,15 @@ def read_value(bundle_id: str = None, element_id: str = None) -> str:
     print(f"Attempting to read value from element '{element_id}' in '{bundle_id}'...")
     
     # Layer 1: AppleScript
-    try:
-        success, value = applescript.read_value(bundle_id=bundle_id, element_id=element_id)
-        if success:
-            print(f"✓ AppleScript: read value '{value}' from '{element_id}'")
-            return value
-        else:
-            print(f"  AppleScript: {value}")
-    except Exception as e:
-        print(f"  AppleScript failed: {e}")
+    # try:
+    #     success, value = applescript.read_value(bundle_id=bundle_id, element_id=element_id)
+    #     if success:
+    #         print(f"✓ AppleScript: read value '{value}' from '{element_id}'")
+    #         return value
+    #     else:
+    #         print(f"  AppleScript: {value}")
+    # except Exception as e:
+    #     print(f"  AppleScript failed: {e}")
     
     # Layer 2: Accessibility API
     try:
@@ -298,31 +294,6 @@ def scroll(bundle_id: str = None, direction: str = None, amount: int = 3) -> boo
     print(f"✗ Failed to scroll {direction} in '{bundle_id}' using all methods")
     return False
 
-
-@mcp.tool(
-    title="Get App Info",
-    description="Get information about a running application."
-)
-def get_app_info(bundle_id: str = None) -> dict:
-    """
-    Get information about a running application.
-    
-    Args:
-        bundle_id: Bundle ID of the application (e.g., com.apple.finder)
-        
-    Returns:
-        Dictionary containing app information
-    """
-    try:
-        result = applescript.get_app_info(bundle_id=bundle_id)
-        print(f"✓ Retrieved info for app '{bundle_id}'")
-        return result
-    except Exception as e:
-        error_msg = f"Error getting app info: {e}"
-        print(f"✗ {error_msg}")
-        return {"error": error_msg}
-
-
 @mcp.tool(
     title="List Running Apps",
     description="List all currently running applications that can be controlled."
@@ -360,27 +331,19 @@ def check_permissions() -> dict:
     
     result = {
         "accessibility": ax_permissions,
-        "applescript": True,  # AppleScript doesn't require special permissions
-        "pyautogui": True,    # PyAutoGUI doesn't require special permissions
     }
     
     print("Permission status:")
     print(f"  Accessibility: {'✓ Granted' if ax_permissions else '✗ Not granted'}")
-    print(f"  AppleScript: ✓ Available")
-    print(f"  PyAutoGUI: ✓ Available")
     
     return result
 
 def main():
-    """Main entry point for the MCP server."""
-    
     # Check permissions on startup
     check_permissions_on_startup()
     
     # Start the MCP server
     mcp.run()
-
-    print("MCP Server started")
 
 
 if __name__ == "__main__":
