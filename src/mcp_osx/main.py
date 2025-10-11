@@ -24,9 +24,23 @@ def check_permissions_on_startup():
     
     # Check Accessibility permissions
     if not ax.check_ax_permissions():
-        print("⚠️  WARNING: Accessibility permissions not granted!")
-        print("   Enable in: System Settings → Privacy & Security → Accessibility")
-        print("   This will limit functionality to AppleScript and PyAutoGUI fallback.")
+        try:
+            import subprocess
+            # Try to open Accessibility using URI (works on Ventura+)
+            subprocess.run([
+                "open",
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            ], check=True)
+        except Exception as err:
+            print(f"Unable to open System Settings automatically: {err}")
+
+
+        print("\n" + "="*60)
+        print("⚠️  Accessibility Permission Required ⚠️")
+        print(f"This application needs Accessibility permissions to function.")
+        print(f"Enable Accessibility access for this app and restart this application after enabling permissions.")
+        print("="*60 + "\n")
+        raise RuntimeError("Accessibility permissions are not granted. Cannot interact with windows or list elements. Please enable Accessibility permissions for this app in System Settings → Privacy & Security → Accessibility.")
     else:
         print("✓ Accessibility permissions granted")
     
@@ -36,20 +50,18 @@ def check_permissions_on_startup():
     title="List UI Elements",
     description="Return the UI element hierarchy of the specified app window."
 )
-def list_elements(app_name: str = None, bundle_id: str = None) -> dict:
+def list_elements(bundle_id: str = None) -> dict:
     """
     Return the UI element hierarchy of the specified app window.
     
     Args:
-        app_name: Name of the application (use exact name from list_running_apps())
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         
     Returns:
         Dictionary containing the UI element hierarchy with roles, titles, identifiers, and positions
     """
     try:
-        result = ax.list_elements(app_name=app_name, bundle_id=bundle_id)
-        print(f"✓ Listed elements for {app_name or bundle_id}")
+        result = ax.list_elements(bundle_id=bundle_id)
         return result
     except Exception as e:
         error_msg = f"Error listing elements: {e}"
@@ -61,33 +73,32 @@ def list_elements(app_name: str = None, bundle_id: str = None) -> dict:
     title="Press UI Element",
     description="Press (click) the specified UI element in the given application."
 )
-def press_element(app_name: str = None, bundle_id: str = None, element_id: str = None) -> bool:
+def press_element(bundle_id: str = None, element_id: str = None) -> bool:
     """
     Press (click) the specified UI element in the given application.
     
     Uses three-tier automation: AppleScript → Accessibility API → PyAutoGUI fallback.
     
     Args:
-        app_name: Name of the application (use exact name from list_running_apps())
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         element_id: Element identifier, title, or description to press
         
     Returns:
         True if successful, False otherwise
     """
-    print(f"Attempting to press element '{element_id}' in '{app_name or bundle_id}'...")
+    print(f"Attempting to press element '{element_id}' in '{bundle_id}'...")
     
     # Layer 1: AppleScript
     try:
-        if applescript.press_element(app_name=app_name, bundle_id=bundle_id, element_id=element_id):
-            print(f"✓ AppleScript: pressed '{element_id}' in '{app_name}'")
+        if applescript.press_element(bundle_id=bundle_id, element_id=element_id):
+            print(f"✓ AppleScript: pressed '{element_id}' in '{bundle_id}'")
             return True
     except Exception as e:
         print(f"  AppleScript failed: {e}")
     
     # Layer 2: Accessibility API
     try:
-        elem = ax.find_element(app_name=app_name, bundle_id=bundle_id, element_id=element_id)
+        elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
         if elem:
             if ax.press_element(elem):
                 print(f"✓ Accessibility: pressed '{element_id}'")
@@ -101,7 +112,7 @@ def press_element(app_name: str = None, bundle_id: str = None, element_id: str =
     
     # Layer 3: PyAutoGUI Fallback
     try:
-        elem = ax.find_element(app_name=app_name, bundle_id=bundle_id, element_id=element_id)
+        elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
         if elem:
             coords = ax.get_element_coords(elem)
             if coords:
@@ -117,7 +128,7 @@ def press_element(app_name: str = None, bundle_id: str = None, element_id: str =
     except Exception as e:
         print(f"  PyAutoGUI failed: {e}")
     
-    print(f"✗ Failed to press '{element_id}' in '{app_name or bundle_id}' using all methods")
+    print(f"✗ Failed to press '{element_id}' in '{bundle_id}' using all methods")
     return False
 
 
@@ -125,14 +136,13 @@ def press_element(app_name: str = None, bundle_id: str = None, element_id: str =
     title="Enter Text",
     description="Enter text into the specified UI element in the given application."
 )
-def enter_text(app_name: str = None, bundle_id: str = None, element_id: str = None, text: str = None) -> bool:
+def enter_text(bundle_id: str = None, element_id: str = None, text: str = None) -> bool:
     """
     Enter text into the specified UI element in the given application.
     
     Uses three-tier automation: AppleScript → Accessibility API → PyAutoGUI fallback.
     
     Args:
-        app_name: Name of the application (use exact name from list_running_apps())
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         element_id: Element identifier, title, or description
         text: Text to enter into the element
@@ -140,11 +150,11 @@ def enter_text(app_name: str = None, bundle_id: str = None, element_id: str = No
     Returns:
         True if successful, False otherwise
     """
-    print(f"Attempting to enter text '{text}' into element '{element_id}' in '{app_name or bundle_id}'...")
+    print(f"Attempting to enter text '{text}' into element '{element_id}' in '{bundle_id}'...")
     
     # Layer 1: AppleScript
     try:
-        if applescript.enter_text(app_name=app_name, bundle_id=bundle_id, element_id=element_id, text=text):
+        if applescript.enter_text(bundle_id=bundle_id, element_id=element_id, text=text):
             print(f"✓ AppleScript: entered text into '{element_id}'")
             return True
     except Exception as e:
@@ -152,7 +162,7 @@ def enter_text(app_name: str = None, bundle_id: str = None, element_id: str = No
     
     # Layer 2: Accessibility API
     try:
-        elem = ax.find_element(app_name=app_name, bundle_id=bundle_id, element_id=element_id)
+        elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
         if elem:
             if ax.enter_text(elem, text):
                 print(f"✓ Accessibility: entered text into '{element_id}'")
@@ -166,7 +176,7 @@ def enter_text(app_name: str = None, bundle_id: str = None, element_id: str = No
     
     # Layer 3: PyAutoGUI Fallback
     try:
-        elem = ax.find_element(app_name=app_name, bundle_id=bundle_id, element_id=element_id)
+        elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
         if elem:
             coords = ax.get_element_coords(elem)
             if coords:
@@ -183,7 +193,7 @@ def enter_text(app_name: str = None, bundle_id: str = None, element_id: str = No
     except Exception as e:
         print(f"  PyAutoGUI failed: {e}")
     
-    print(f"✗ Failed to enter text into '{element_id}' in '{app_name or bundle_id}' using all methods")
+    print(f"✗ Failed to enter text into '{element_id}' in '{bundle_id}' using all methods")
     return False
 
 
@@ -191,25 +201,24 @@ def enter_text(app_name: str = None, bundle_id: str = None, element_id: str = No
     title="Read Value",
     description="Read the value from the specified UI element in the given application."
 )
-def read_value(app_name: str = None, bundle_id: str = None, element_id: str = None) -> str:
+def read_value(bundle_id: str = None, element_id: str = None) -> str:
     """
     Read the value from the specified UI element in the given application.
     
     Uses two-tier approach: AppleScript → Accessibility API (PyAutoGUI cannot read values).
     
     Args:
-        app_name: Name of the application (use exact name from list_running_apps())
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         element_id: Element identifier, title, or description
         
     Returns:
         Element value as string, or error message if failed
     """
-    print(f"Attempting to read value from element '{element_id}' in '{app_name or bundle_id}'...")
+    print(f"Attempting to read value from element '{element_id}' in '{bundle_id}'...")
     
     # Layer 1: AppleScript
     try:
-        success, value = applescript.read_value(app_name=app_name, bundle_id=bundle_id, element_id=element_id)
+        success, value = applescript.read_value(bundle_id=bundle_id, element_id=element_id)
         if success:
             print(f"✓ AppleScript: read value '{value}' from '{element_id}'")
             return value
@@ -220,7 +229,7 @@ def read_value(app_name: str = None, bundle_id: str = None, element_id: str = No
     
     # Layer 2: Accessibility API
     try:
-        elem = ax.find_element(app_name=app_name, bundle_id=bundle_id, element_id=element_id)
+        elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
         if elem:
             value = ax.read_value(elem)
             if value:
@@ -233,7 +242,7 @@ def read_value(app_name: str = None, bundle_id: str = None, element_id: str = No
     except Exception as e:
         print(f"  Accessibility failed: {e}")
     
-    error_msg = f"Failed to read value from '{element_id}' in '{app_name or bundle_id}'"
+    error_msg = f"Failed to read value from '{element_id}' in '{bundle_id}'"
     print(f"✗ {error_msg}")
     return error_msg
 
@@ -242,14 +251,13 @@ def read_value(app_name: str = None, bundle_id: str = None, element_id: str = No
     title="Scroll",
     description="Scroll in the specified direction within the given application."
 )
-def scroll(app_name: str = None, bundle_id: str = None, direction: str = None, amount: int = 3) -> bool:
+def scroll(bundle_id: str = None, direction: str = None, amount: int = 3) -> bool:
     """
     Scroll in the specified direction within the given application.
     
     Uses two-tier approach: Accessibility API → PyAutoGUI fallback.
     
     Args:
-        app_name: Name of the application (use exact name from list_running_apps())
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         direction: Direction to scroll ("up", "down", "left", "right")
         amount: Number of scroll units (default: 3)
@@ -257,11 +265,11 @@ def scroll(app_name: str = None, bundle_id: str = None, direction: str = None, a
     Returns:
         True if successful, False otherwise
     """
-    print(f"Attempting to scroll {direction} by {amount} units in '{app_name or bundle_id}'...")
+    print(f"Attempting to scroll {direction} by {amount} units in '{bundle_id}'...")
     
     # Layer 1: Accessibility API
     try:
-        if ax.scroll_window(app_name=app_name, bundle_id=bundle_id, direction=direction, amount=amount):
+        if ax.scroll_window(bundle_id=bundle_id, direction=direction, amount=amount):
             print(f"✓ Accessibility: scrolled {direction} by {amount} units")
             return True
         else:
@@ -287,7 +295,7 @@ def scroll(app_name: str = None, bundle_id: str = None, direction: str = None, a
     except Exception as e:
         print(f"  PyAutoGUI failed: {e}")
     
-    print(f"✗ Failed to scroll {direction} in '{app_name or bundle_id}' using all methods")
+    print(f"✗ Failed to scroll {direction} in '{bundle_id}' using all methods")
     return False
 
 
@@ -295,20 +303,19 @@ def scroll(app_name: str = None, bundle_id: str = None, direction: str = None, a
     title="Get App Info",
     description="Get information about a running application."
 )
-def get_app_info(app_name: str = None, bundle_id: str = None) -> dict:
+def get_app_info(bundle_id: str = None) -> dict:
     """
     Get information about a running application.
     
     Args:
-        app_name: Name of the application (use exact name from list_running_apps())
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         
     Returns:
         Dictionary containing app information
     """
     try:
-        result = applescript.get_app_info(app_name=app_name, bundle_id=bundle_id)
-        print(f"✓ Retrieved info for app '{app_name or bundle_id}'")
+        result = applescript.get_app_info(bundle_id=bundle_id)
+        print(f"✓ Retrieved info for app '{bundle_id}'")
         return result
     except Exception as e:
         error_msg = f"Error getting app info: {e}"
@@ -325,7 +332,8 @@ def list_running_apps() -> dict:
     List all currently running applications that can be controlled.
     
     Returns:
-        Dictionary containing list of running applications with their exact names
+        Dictionary containing list of running applications with their names
+        as the key and their bundle_id as the value
     """
     try:
         result = ax.list_running_apps()
@@ -365,28 +373,14 @@ def check_permissions() -> dict:
 
 def main():
     """Main entry point for the MCP server."""
-    print("🚀 Starting MCP macOS GUI Control Server")
-    print("=" * 50)
     
     # Check permissions on startup
     check_permissions_on_startup()
     
-    print("📋 Available MCP Tools:")
-    print("  • list_elements(app_name, bundle_id, window) - List UI elements")
-    print("  • press_element(app_name, bundle_id, element_id) - Click/press element")
-    print("  • enter_text(app_name, bundle_id, element_id, text) - Enter text")
-    print("  • read_value(app_name, bundle_id, element_id) - Read element value")
-    print("  • scroll(app_name, bundle_id, direction, amount) - Scroll in app")
-    print("  • get_app_info(app_name, bundle_id) - Get app information")
-    print("  • list_running_apps() - List all running applications")
-    print("  • check_permissions() - Check macOS permissions")
-    
-    print("🔗 MCP Server starting...")
-    print("Connect your MCP client to this server to control macOS GUI applications!")
-    print("=" * 50)
-    
     # Start the MCP server
     mcp.run()
+
+    print("MCP Server started")
 
 
 if __name__ == "__main__":
