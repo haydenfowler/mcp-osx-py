@@ -1,3 +1,6 @@
+from time import sleep
+import atomacos
+
 def find_element_by_id(root_window, element_id):
     import re
 
@@ -36,3 +39,83 @@ def find_element_by_id(root_window, element_id):
             return None
 
     return elem
+
+def perform_element_action(app: atomacos.NativeUIElement,window: atomacos.NativeUIElement, element_id: str, action: str, value: str | None = None) -> bool:
+    """
+    Generic interaction helper.
+    Executes the given action on the specified element_id (as returned by get_window_structure_abstract()).
+    """
+    try:
+        # Parse path id like "0/1/3"
+        indices = [int(x) for x in element_id.strip("/").split("/") if x.strip() != ""]
+        elem = window
+
+        for i in indices[1:]:
+            children = getattr(elem, "AXChildren", None) or []
+            if i >= len(children):
+                return False
+            elem = children[i]
+
+        # Normalize action
+        action = action.lower()
+
+        # Text entry
+        if action in ("type", "input", "setvalue"):
+            if value is None:
+                return False
+            elem.setString("AXValue", value)
+            elemActions = elem.getActions()
+            if "Confirm" in elemActions:
+                getattr(elem, "Confirm")()
+                sleep(0.1)
+                elem.sendGlobalKey("return")
+                elem.sendGlobalKey("return")
+            return True
+
+        # Scroll actions
+        if action in ("scrollup", "scrolldown", "scrollleft", "scrollright"):
+            ax_action = {
+                "scrollup": "ScrollUpByPage",
+                "scrolldown": "ScrollDownByPage",
+                "scrollleft": "ScrollLeftByPage",
+                "scrollright": "ScrollRightByPage",
+            }[action]
+            try:
+                getattr(elem, ax_action)()
+                return True
+            except Exception:
+                return False
+
+        # Press / click / open / menu actions
+        for candidate in ("Press", "Open", "ShowMenu", "Raise", "PerformClick"):
+            try:
+                actions = elem.getActions()
+                if candidate in actions:
+                    getattr(elem, candidate)()
+                    return True
+            except Exception as e:
+                # Ignore benign macOS accessibility errors like -25205
+                if "-25205" in str(e):
+                    return True
+
+        # As a fallback, climb parents if the target itself isn't actionable
+        parent = getattr(elem, "AXParent", None)
+        while parent:
+            try:
+                actions = parent.getActions()
+            except Exception:
+                actions = []
+            for candidate in ("Press", "Open", "ShowMenu", "Raise", "PerformClick"):
+                if candidate in actions:
+                    try:
+                        getattr(parent, candidate)()
+                        return True
+                    except Exception as e:
+                        if "-25205" in str(e):
+                            return True
+            parent = getattr(parent, "AXParent", None)
+
+        return False
+
+    except Exception:
+        return False

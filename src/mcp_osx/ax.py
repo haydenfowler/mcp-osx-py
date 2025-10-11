@@ -20,8 +20,8 @@ from objc import nil
 import psutil
 import plistlib
 import os
-from mcp_osx.serializewindowstructure import get_window_structure
-from mcp_osx.elementfinder import find_element_by_id
+import mcp_osx.serializewindowstructure  as windowmethods
+import mcp_osx.elementfinder as elementfinder
 
 def check_ax_permissions() -> bool:
     """
@@ -77,32 +77,23 @@ def get_front_window(app: atomacos.NativeUIElement) -> Optional[atomacos.NativeU
         return None
 
 def list_elements(bundle_id: str = None) -> Dict[str, Any]:
-    """
-    List all UI elements in the specified app window.
-    
-    Args:
-        bundle_id: Bundle ID of the application
-        
-    Returns:
-        Dictionary containing the UI element hierarchy
-    """
     try:
         app = get_app_reference(bundle_id)
         if not app:
             return {"error": f"Application with bundle_id='{bundle_id}' not found"}
-        
-        # app.activate()
+
         window = get_front_window(app)
         if not window:
             return {"error": f"No window found in application"}
         
-        return get_window_structure(window)
+        # return windowmethods.get_window_structure(window)
+        return windowmethods.get_window_structure_abstract(window)
         
     except Exception as e:
         return {"error": f"Error listing elements: {e}"}
 
 
-def find_element(bundle_id: str = None, element_id: str = None) -> Optional[atomacos.NativeUIElement]:
+def find_element(bundle_id: str, element_id: str) -> Optional[atomacos.NativeUIElement]:
     try:
         app = get_app_reference(bundle_id)
         if not app:
@@ -112,12 +103,27 @@ def find_element(bundle_id: str = None, element_id: str = None) -> Optional[atom
         if not window:
             return None
         
-        return find_element_by_id(window, element_id=element_id)
+        return elementfinder.find_element_by_id(window, element_id=element_id)
         
     except Exception as e:
         print(f"Error finding element {element_id}: {e}")
-        return None
+        return None  
 
+def perform_element_action(bundle_id: str, element_id: str, action: str, value: str | None = None) -> bool:
+    try:
+        app = get_app_reference(bundle_id)
+        if not app:
+            return None
+        
+        window = get_front_window(app)
+        if not window:
+            return None
+        
+        return elementfinder.perform_element_action(app, window, element_id, action, value)
+        
+    except Exception as e:
+        print(f"Error finding element {element_id}: {e}")
+        return None  
 
 def press_element(element: atomacos.NativeUIElement) -> bool:
     try:
@@ -176,36 +182,6 @@ def enter_text(element: atomacos.NativeUIElement, text: str) -> bool:
     except Exception as e:
         print(f"Error entering text: {e}")
         return False
-
-
-def read_value(element: atomacos.NativeUIElement) -> str:
-    """
-    Read the value from a UI element.
-    
-    Args:
-        element: Atom instance of the element
-        
-    Returns:
-        Element value as string
-    """
-    try:
-        # Try different value attributes
-        value_attrs = ['AXValue', 'AXTitle', 'AXDescription']
-        
-        for attr in value_attrs:
-            try:
-                value = getattr(element, attr, None)
-                if value:
-                    return str(value)
-            except:
-                continue
-        
-        return ""
-        
-    except Exception as e:
-        print(f"Error reading value: {e}")
-        return ""
-
 
 def get_element_coords(element: atomacos.NativeUIElement) -> Optional[Tuple[int, int]]:
     """

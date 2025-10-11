@@ -211,3 +211,136 @@ def get_window_structure(window_element: Any) -> Dict[str, Any]:
 
     # Root path starts at 0 to make selectors predictable
     return serialize(window_element, [0])
+
+import atomacos
+
+def simplify_role(ax_role: str, actions: list[str]) -> str:
+    if not ax_role:
+        return "element"
+    role = ax_role.lower()
+    if any(k in role for k in ("button", "checkbox", "radio", "menu", "tab")):
+        return "button"
+    if any(k in role for k in ("textfield", "text area", "search")):
+        return "input"
+    if "statictext" in role or "label" in role:
+        return "text"
+    if any(a.lower().startswith("scroll") for a in actions):
+        return "scrollable"
+    if "window" in role or "group" in role or "split" in role or "toolbar" in role:
+        return "container"
+    return "element"
+
+def get_accessibility_name(elem) -> str | None:
+    """Return the most human-readable name or hint available."""
+    def safe(attr):
+        try:
+            return getattr(elem, attr, None)
+        except Exception:
+            return None
+
+    # Preferred name sources
+    for attr in ("AXTitle", "AXLabel", "AXValue"):
+        v = safe(attr)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+
+    # Try help / description tooltips
+    for attr in ("AXHelp", "AXDescription"):
+        v = safe(attr)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+
+    # Try a titled label element (e.g. toolbar button icon with hidden label)
+    title_el = safe("AXTitleUIElement")
+    if title_el is not None:
+        for attr in ("AXValue", "AXTitle", "AXLabel"):
+            try:
+                v = getattr(title_el, attr)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+            except Exception:
+                continue
+
+    # Fallback: role description
+    role_desc = safe("AXRoleDescription")
+    if isinstance(role_desc, str) and role_desc.strip():
+        return role_desc.strip()
+
+    return None
+
+
+def get_window_structure_abstract(window_element: atomacos.NativeUIElement) -> dict:
+    def serialize(elem, path, depth=0):
+        if depth > 40:
+            return None
+
+        def safe_get(attr):
+            try:
+                return getattr(elem, attr, None)
+            except Exception:
+                return None
+
+        try:
+            role = safe_get("AXRole")
+            actions = elem.getActions()
+        except Exception:
+            role, actions = None, []
+
+        simple_role = simplify_role(role, actions)
+        name = get_accessibility_name(elem)
+
+        element_data = {
+            "id": "/".join(str(i) for i in path),
+            "role": simple_role,
+            "name": name,
+            "actions": [a.lower() for a in actions],
+            "children": [],
+        }
+
+        # Get valid children
+        try:
+            children = safe_get("AXChildren") or []
+        except Exception:
+            children = []
+
+        valid_children = []
+        for c in children:
+            try:
+                _ = getattr(c, "AXRole", None)
+                valid_children.append(c)
+            except Exception:
+                continue
+
+        for i, child in enumerate(valid_children):
+            child_data = serialize(child, path + [i], depth + 1)
+            if not child_data:
+                continue
+
+            # Roll up child actions
+            for a in child_data["actions"]:
+                if a not in element_data["actions"]:
+                    element_data["actions"].append(a)
+
+            # Promote role if this element has actionable children
+            if (
+                element_data["role"] in ("element", "container")
+                and any(a in element_data["actions"] for a in ("press", "open", "showmenu", "showdefaultui"))
+            ):
+                element_data["role"] = "button"
+
+            # Merge child text into parent label if this looks like a clickable item
+            if (
+                child_data["role"] == "text"
+                and not element_data.get("name")
+                and any(a in element_data["actions"] for a in ("press", "open", "showmenu", "showdefaultui"))
+            ):
+                element_data["name"] = child_data["name"]
+            else:
+                element_data["children"].append(child_data)
+
+        return element_data
+
+    try:
+        return serialize(window_element, [0])
+    except Exception as e:
+        return {"error": f"Error listing elements: {e}"}
