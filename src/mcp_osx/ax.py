@@ -6,7 +6,7 @@ This is the second tier in our three-layer automation strategy.
 """
 
 import atomacos
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 try:
     from Quartz import AXIsProcessTrusted
 except ImportError:
@@ -17,6 +17,9 @@ except ImportError:
         def AXIsProcessTrusted():
             return False
 import json
+import psutil
+import plistlib
+import os
 
 
 def check_ax_permissions() -> bool:
@@ -29,52 +32,55 @@ def check_ax_permissions() -> bool:
     return AXIsProcessTrusted()
 
 
-def get_app_by_name(app_name: str) -> Optional[atomacos.NativeUIElement]:
+def get_app_reference(bundle_id: str = None, app_name: str = None) -> Optional[atomacos.NativeUIElement]:
     """
     Get an atomacos Atom instance for the specified application.
     
     Args:
-        app_name: Name of the application (e.g., "Finder", "TextEdit", "Spotify")
+        bundle_id: Bundle ID of the application (e.g., "com.apple.finder")
+        app_name: Name of the application (e.g., "Finder", "TextEdit")
         
     Returns:
         Atom instance or None if not found
     """
     try:
-        # Try different variations of the app name for better matching
-        name_variations = [
-            app_name,
-            app_name + ".app",
-            app_name.lower(),
-            app_name.upper(),
-            app_name.title(),
-            app_name.replace(" ", ""),  # Remove spaces
-            app_name.replace(" ", "").lower()
-        ]
-        
-        for variation in name_variations:
-            # Try to find the app by bundle ID first
-            app = atomacos.getAppRefByBundleId(variation)
+        # Prioritize bundle_id if provided
+        if bundle_id:
+            app = atomacos.getAppRefByBundleId(bundle_id)
             if app:
                 return app
+        
+        # Fallback to app_name if bundle_id fails or is not provided
+        if app_name:
+            name_variations = [
+                app_name,
+                app_name + ".app",
+                app_name.lower(),
+                app_name.upper(),
+                app_name.title(),
+                app_name.replace(" ", ""),
+                app_name.replace(" ", "").lower()
+            ]
             
-            # Try to find by localized name
-            app = atomacos.getAppRefByLocalizedName(variation)
-            if app:
-                return app
-        
-        # Try to get frontmost app if it matches
-        try:
-            frontmost = atomacos.getFrontmostApp()
-            if frontmost and hasattr(frontmost, 'AXTitle'):
-                frontmost_title = frontmost.AXTitle.lower()
-                if any(var.lower() in frontmost_title for var in name_variations):
-                    return frontmost
-        except:
-            pass
+            for variation in name_variations:
+                # Try to find by localized name
+                app = atomacos.getAppRefByLocalizedName(variation)
+                if app:
+                    return app
+            
+            # Try to get frontmost app if it matches
+            try:
+                frontmost = atomacos.getFrontmostApp()
+                if frontmost and hasattr(frontmost, 'AXTitle'):
+                    frontmost_title = frontmost.AXTitle.lower()
+                    if any(var.lower() in frontmost_title for var in name_variations):
+                        return frontmost
+            except:
+                pass
                 
         return None
     except Exception as e:
-        print(f"Error getting app {app_name}: {e}")
+        print(f"Error getting app reference for bundle_id='{bundle_id}' or app_name='{app_name}': {e}")
         return None
 
 
@@ -101,21 +107,21 @@ def get_front_window(app: atomacos.NativeUIElement) -> Optional[atomacos.NativeU
         return None
 
 
-def list_elements(app_name: str, window_name: str = None) -> Dict[str, Any]:
+def list_elements(bundle_id: str = None, app_name: str = None) -> Dict[str, Any]:
     """
     List all UI elements in the specified app window.
     
     Args:
+        bundle_id: Bundle ID of the application
         app_name: Name of the application
-        window_name: Name of the window (optional, uses front window if not specified)
         
     Returns:
         Dictionary containing the UI element hierarchy
     """
     try:
-        app = get_app_by_name(app_name)
+        app = get_app_reference(bundle_id, app_name)
         if not app:
-            return {"error": f"Application '{app_name}' not found"}
+            return {"error": f"Application with bundle_id='{bundle_id}' or app_name='{app_name}' not found"}
         
         window = get_front_window(app)
         if not window:
@@ -176,11 +182,12 @@ def list_elements(app_name: str, window_name: str = None) -> Dict[str, Any]:
         return {"error": f"Error listing elements: {e}"}
 
 
-def find_element(app_name: str, element_id: str) -> Optional[atomacos.NativeUIElement]:
+def find_element(bundle_id: str = None, app_name: str = None, element_id: str = None) -> Optional[atomacos.NativeUIElement]:
     """
     Find a UI element by identifier, title, or description.
     
     Args:
+        bundle_id: Bundle ID of the application
         app_name: Name of the application
         element_id: Element identifier, title, or description
         
@@ -188,7 +195,7 @@ def find_element(app_name: str, element_id: str) -> Optional[atomacos.NativeUIEl
         Atom instance of the element or None if not found
     """
     try:
-        app = get_app_by_name(app_name)
+        app = get_app_reference(bundle_id, app_name)
         if not app:
             return None
         
@@ -385,11 +392,12 @@ def scroll_element(element: atomacos.NativeUIElement, direction: str, amount: in
         return False
 
 
-def scroll_window(app_name: str, direction: str, amount: int) -> bool:
+def scroll_window(bundle_id: str = None, app_name: str = None, direction: str = None, amount: int = 3) -> bool:
     """
     Scroll the front window of an application.
     
     Args:
+        bundle_id: Bundle ID of the application
         app_name: Name of the application
         direction: "up", "down", "left", or "right"
         amount: Number of units to scroll
@@ -398,7 +406,7 @@ def scroll_window(app_name: str, direction: str, amount: int) -> bool:
         True if successful, False otherwise
     """
     try:
-        app = get_app_by_name(app_name)
+        app = get_app_reference(bundle_id, app_name)
         if not app:
             return False
         
@@ -422,72 +430,28 @@ def list_running_apps() -> Dict[str, Any]:
     """
     try:
         apps = []
-        
-        # Import applescript here to avoid circular imports
-        from . import applescript
-        
-        # Use AppleScript to get running applications
-        script = '''
-        tell application "System Events"
-            set appList to {}
-            repeat with appProcess in (every process whose background only is false)
-                try
-                    set appName to name of appProcess
-                    set end of appList to appName & return
-                end try
-            end repeat
-            return appList as string
-        end tell
-        '''
-        
-        success, output = applescript.run_applescript(script)
-        if success and output.strip():
-            # Parse the output (newline-separated list)
-            app_names = [name.strip() for name in output.split('\n') if name.strip()]
-            
-            # For each app, try to get more info via atomacos
-            for app_name in app_names:
+        for p in psutil.process_iter(['pid', 'name', 'exe']):
+            if p.info['exe'] and ".app/Contents/MacOS" in p.info['exe']:
                 try:
-                    app = atomacos.getAppRefByLocalizedName(app_name)
-                    if app:
-                        # Try multiple methods to get bundle ID
-                        bundle_id = ""
-                        try:
-                            bundle_id = getattr(app, 'bundleIdentifier', '')
-                            if not bundle_id:
-                                # Try alternative method
-                                bundle_id = app.bundleIdentifier()
-                        except:
-                            try:
-                                # Try direct attribute access
-                                bundle_id = app.bundleIdentifier
-                            except:
-                                bundle_id = ""
-                        
-                        app_info = {
-                            "name": app_name,
-                            "bundle_id": bundle_id,
-                            "localized_name": getattr(app, 'AXTitle', app_name),
-                            "frontmost": getattr(app, 'AXFrontmost', False)
-                        }
-                        apps.append(app_info)
-                    else:
-                        # Fallback: just add the name if we can't get more info
-                        apps.append({
-                            "name": app_name,
-                            "bundle_id": "",
-                            "localized_name": app_name,
-                            "frontmost": False
-                        })
-                except:
-                    # Fallback: just add the name if we can't get more info
+                    info_plist_path = os.path.join(p.info['exe'].split(".app/")[0] + ".app", "Contents", "Info.plist")
+                    with open(info_plist_path, 'rb') as f:
+                        plist = plistlib.load(f)
+                        bundle_id = plist.get('CFBundleIdentifier')
+                        name = plist.get('CFBundleName') or p.info['name']
+
                     apps.append({
-                        "name": app_name,
-                        "bundle_id": "",
-                        "localized_name": app_name,
-                        "frontmost": False
+                        "name": name,
+                        "bundle_id": bundle_id,
+                        "pid": p.info['pid'],
                     })
-        
+                except (FileNotFoundError, ValueError, KeyError):
+                    # Fallback for apps with missing or malformed plists
+                    apps.append({
+                        "name": p.info['name'],
+                        "bundle_id": None,
+                        "pid": p.info['pid'],
+                    })
+
         return {
             "success": True,
             "apps": apps,

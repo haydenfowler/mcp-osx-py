@@ -27,6 +27,7 @@ dependencies = [
     "atomacos",
     "pyautogui",
     "pyobjc-framework-quartz",
+    "psutil>=7.1.0",
 ]
 
 [project.scripts]
