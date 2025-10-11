@@ -2,21 +2,18 @@
 Main MCP Server for macOS GUI Control
 
 FastMCP-based server that exposes GUI control tools for LLMs.
-Each tool uses a three-tier automation strategy: AppleScript → Accessibility API → PyAutoGUI.
 """
 
 from mcp.server.fastmcp import FastMCP
-# from . import applescript
-from . import ax
-from . import fallback
-
+# import mcp_osx.applescript as applescript
+import mcp_osx.ax as ax
+# import mcp_osx.fallback as fallback
 
 # Initialize FastMCP server
 mcp = FastMCP(
     name="macOS_GUI_Control",
     instructions="A tool for controlling the macOS GUI, including listing and interacting with UI elements in running applications."
 )
-
 
 def check_permissions_on_startup():
     """Check and report on required permissions."""
@@ -51,15 +48,6 @@ def check_permissions_on_startup():
     description="Return the UI element hierarchy of the specified app window."
 )
 def list_elements(bundle_id: str = None) -> dict:
-    """
-    Return the UI element hierarchy of the specified app window.
-    
-    Args:
-        bundle_id: Bundle ID of the application (e.g., com.apple.finder)
-        
-    Returns:
-        Dictionary containing the UI element hierarchy with roles, titles, identifiers, and positions
-    """
     try:
         result = ax.list_elements(bundle_id=bundle_id)
         return result
@@ -77,8 +65,6 @@ def press_element(bundle_id: str = None, element_id: str = None) -> bool:
     """
     Press (click) the specified UI element in the given application.
     
-    Uses three-tier automation: AppleScript → Accessibility API → PyAutoGUI fallback.
-    
     Args:
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         element_id: Element identifier, title, or description to press
@@ -86,7 +72,6 @@ def press_element(bundle_id: str = None, element_id: str = None) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    print(f"Attempting to press element '{element_id}' in '{bundle_id}'...")
     
     # Layer 1: AppleScript
     # try:
@@ -99,9 +84,9 @@ def press_element(bundle_id: str = None, element_id: str = None) -> bool:
     # Layer 2: Accessibility API
     try:
         elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
+        print(elem)
         if elem:
             if ax.press_element(elem):
-                print(f"✓ Accessibility: pressed '{element_id}'")
                 return True
             else:
                 print(f"  Accessibility: found element but press failed")
@@ -111,24 +96,24 @@ def press_element(bundle_id: str = None, element_id: str = None) -> bool:
         print(f"  Accessibility failed: {e}")
     
     # Layer 3: PyAutoGUI Fallback
-    try:
-        elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
-        if elem:
-            coords = ax.get_element_coords(elem)
-            if coords:
-                if fallback.click_at(*coords):
-                    print(f"✓ PyAutoGUI: clicked at {coords}")
-                    return True
-                else:
-                    print(f"  PyAutoGUI: click at {coords} failed")
-            else:
-                print(f"  PyAutoGUI: could not get coordinates for element")
-        else:
-            print(f"  PyAutoGUI: element not found for coordinate lookup")
-    except Exception as e:
-        print(f"  PyAutoGUI failed: {e}")
+    # try:
+    #     elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
+    #     if elem:
+    #         coords = ax.get_element_coords(elem)
+    #         if coords:
+    #             if fallback.click_at(*coords):
+    #                 print(f"✓ PyAutoGUI: clicked at {coords}")
+    #                 return True
+    #             else:
+    #                 print(f"  PyAutoGUI: click at {coords} failed")
+    #         else:
+    #             print(f"  PyAutoGUI: could not get coordinates for element")
+    #     else:
+    #         print(f"  PyAutoGUI: element not found for coordinate lookup")
+    # except Exception as e:
+    #     print(f"  PyAutoGUI failed: {e}")
     
-    print(f"✗ Failed to press '{element_id}' in '{bundle_id}' using all methods")
+    # print(f"✗ Failed to press '{element_id}' in '{bundle_id}' using all methods")
     return False
 
 
@@ -173,25 +158,25 @@ def enter_text(bundle_id: str = None, element_id: str = None, text: str = None) 
         print(f"  Accessibility failed: {e}")
     
     # Layer 3: PyAutoGUI Fallback
-    try:
-        elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
-        if elem:
-            coords = ax.get_element_coords(elem)
-            if coords:
-                # Click to focus, then type
-                if fallback.click_at(*coords) and fallback.type_text(text):
-                    print(f"✓ PyAutoGUI: clicked at {coords} and typed text")
-                    return True
-                else:
-                    print(f"  PyAutoGUI: click or typing failed")
-            else:
-                print(f"  PyAutoGUI: could not get coordinates for element")
-        else:
-            print(f"  PyAutoGUI: element not found for coordinate lookup")
-    except Exception as e:
-        print(f"  PyAutoGUI failed: {e}")
+    # try:
+    #     elem = ax.find_element(bundle_id=bundle_id, element_id=element_id)
+    #     if elem:
+    #         coords = ax.get_element_coords(elem)
+    #         if coords:
+    #             # Click to focus, then type
+    #             if fallback.click_at(*coords) and fallback.type_text(text):
+    #                 print(f"✓ PyAutoGUI: clicked at {coords} and typed text")
+    #                 return True
+    #             else:
+    #                 print(f"  PyAutoGUI: click or typing failed")
+    #         else:
+    #             print(f"  PyAutoGUI: could not get coordinates for element")
+    #     else:
+    #         print(f"  PyAutoGUI: element not found for coordinate lookup")
+    # except Exception as e:
+    #     print(f"  PyAutoGUI failed: {e}")
     
-    print(f"✗ Failed to enter text into '{element_id}' in '{bundle_id}' using all methods")
+    # print(f"✗ Failed to enter text into '{element_id}' in '{bundle_id}' using all methods")
     return False
 
 
@@ -251,8 +236,6 @@ def scroll(bundle_id: str = None, direction: str = None, amount: int = 3) -> boo
     """
     Scroll in the specified direction within the given application.
     
-    Uses two-tier approach: Accessibility API → PyAutoGUI fallback.
-    
     Args:
         bundle_id: Bundle ID of the application (e.g., com.apple.finder)
         direction: Direction to scroll ("up", "down", "left", "right")
@@ -274,24 +257,24 @@ def scroll(bundle_id: str = None, direction: str = None, amount: int = 3) -> boo
         print(f"  Accessibility failed: {e}")
     
     # Layer 2: PyAutoGUI Fallback
-    try:
-        # Convert direction to scroll amount
-        scroll_amount = amount if direction.lower() in ["up", "right"] else -amount
+    # try:
+    #     # Convert direction to scroll amount
+    #     scroll_amount = amount if direction.lower() in ["up", "right"] else -amount
         
-        if direction.lower() in ["up", "down"]:
-            success = fallback.scroll(scroll_amount)
-        else:  # left, right
-            success = fallback.hscroll(scroll_amount)
+    #     if direction.lower() in ["up", "down"]:
+    #         success = fallback.scroll(scroll_amount)
+    #     else:  # left, right
+    #         success = fallback.hscroll(scroll_amount)
         
-        if success:
-            print(f"✓ PyAutoGUI: scrolled {direction} by {amount} units")
-            return True
-        else:
-            print(f"  PyAutoGUI: scroll failed")
-    except Exception as e:
-        print(f"  PyAutoGUI failed: {e}")
+    #     if success:
+    #         print(f"✓ PyAutoGUI: scrolled {direction} by {amount} units")
+    #         return True
+    #     else:
+    #         print(f"  PyAutoGUI: scroll failed")
+    # except Exception as e:
+    #     print(f"  PyAutoGUI failed: {e}")
     
-    print(f"✗ Failed to scroll {direction} in '{bundle_id}' using all methods")
+    # print(f"✗ Failed to scroll {direction} in '{bundle_id}' using all methods")
     return False
 
 @mcp.tool(
@@ -311,10 +294,20 @@ def list_running_apps() -> dict:
         print("✓ Retrieved list of running applications")
         return result
     except Exception as e:
-        error_msg = f"Error listing running apps: {e}"
-        print(f"✗ {error_msg}")
-        return {"error": error_msg}
+        return {"error": f"Error listing running apps: {e}"}
 
+@mcp.tool(
+    title="Start an app",
+    description="Starts an app and optionally focusses the window"
+)
+def start_app(bundle_id: str, focusApp: bool = False) -> bool:
+    try :
+        result = ax.start_app(bundle_id)
+        if result and focusApp:
+            return ax.focus_app(bundle_id)
+        return result
+    except Exception as e:
+        return {"error": f"Error starting app: {e}"}
 
 @mcp.tool(
     title="Check Permissions",
@@ -341,7 +334,10 @@ def check_permissions() -> dict:
 def main():
     # Check permissions on startup
     check_permissions_on_startup()
-    
+
+    # print(list_elements("com.apple.finder"))
+    # print(press_element("com.apple.finder", "AXStaticText[0]@0/0/0/0/4/0/0"))
+
     # Start the MCP server
     mcp.run()
 

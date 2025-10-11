@@ -16,11 +16,12 @@ except ImportError:
         # Fallback function if AXIsProcessTrusted is not available
         def AXIsProcessTrusted():
             return False
-import json
+from objc import nil
 import psutil
 import plistlib
 import os
-
+from mcp_osx.serializewindowstructure import get_window_structure
+from mcp_osx.elementfinder import find_element_by_id
 
 def check_ax_permissions() -> bool:
     """
@@ -33,15 +34,6 @@ def check_ax_permissions() -> bool:
 
 
 def get_app_reference(bundle_id: str = None) -> Optional[atomacos.NativeUIElement]:
-    """
-    Get an atomacos Atom instance for the specified application.
-    
-    Args:
-        bundle_id: Bundle ID of the application (e.g., "com.apple.finder")
-        
-    Returns:
-        Atom instance or None if not found
-    """
     try:
         return atomacos.getAppRefByBundleId(bundle_id)
     except Exception as e:
@@ -84,7 +76,6 @@ def get_front_window(app: atomacos.NativeUIElement) -> Optional[atomacos.NativeU
         print(f"Error getting front window: {e}")
         return None
 
-
 def list_elements(bundle_id: str = None) -> Dict[str, Any]:
     """
     List all UI elements in the specified app window.
@@ -105,71 +96,13 @@ def list_elements(bundle_id: str = None) -> Dict[str, Any]:
         if not window:
             return {"error": f"No window found in application"}
         
-        def element_to_dict(element: atomacos.NativeUIElement, depth: int = 0) -> Dict[str, Any]:
-            # """Recursively convert element to dictionary."""
-            if depth > 10:  # Prevent infinite recursion
-                return {"error": "Max depth reached"}
-            
-            try:
-                element_dict = {
-                    "role": getattr(element, 'AXRole', 'Unknown'),
-                    "title": getattr(element, 'AXTitle', ''),
-                    "description": getattr(element, 'AXDescription', ''),
-                    "identifier": getattr(element, 'AXIdentifier', ''),
-                    "value": getattr(element, 'AXValue', ''),
-                    "enabled": getattr(element, 'AXEnabled', True),
-                    "focused": getattr(element, 'AXFocused', False),
-                }
-                
-                # Get position and size
-                try:
-                    position = element.AXPosition
-                    size = element.AXSize
-                    element_dict["position"] = {"x": position.x, "y": position.y}
-                    element_dict["size"] = {"width": size.width, "height": size.height}
-                except:
-                    pass
-                
-                # Get actions
-                try:
-                    actions = element.getActions()
-                    element_dict["actions"] = actions
-                except:
-                    element_dict["actions"] = []
-                
-                # Get children
-                try:
-                    children = element.findAll()
-                    # if children:
-                    #     element_dict["children"] = [element_to_dict(child, depth + 1) for child in children]
-                except:
-                    element_dict["children"] = []
-                
-                return element_dict
-                
-            except Exception as e:
-                return {"error": f"Error processing element: {e}"}
-        
-        result = element_to_dict(window)
-        result["window_title"] = getattr(window, 'AXTitle', 'Unknown')
-        
-        return result
+        return get_window_structure(window)
         
     except Exception as e:
         return {"error": f"Error listing elements: {e}"}
 
 
 def find_element(bundle_id: str = None, element_id: str = None) -> Optional[atomacos.NativeUIElement]:
-    """
-    Find a UI element by identifier, title, or description.
-    
-    Args:
-        bundle_id: Bundle ID of the application
-        element_id: Element identifier, title, or description
-        
-    Returns:
-        Atom instance of the element or None if not found
-    """
     try:
         app = get_app_reference(bundle_id)
         if not app:
@@ -179,39 +112,7 @@ def find_element(bundle_id: str = None, element_id: str = None) -> Optional[atom
         if not window:
             return None
         
-        # Try different search strategies
-        search_strategies = [
-            lambda: window.findFirstR(AXIdentifier=element_id),
-            lambda: window.findFirstR(AXTitle=element_id),
-            lambda: window.findFirstR(AXDescription=element_id),
-            lambda: window.findFirstR(AXRole="AXButton", AXTitle=element_id),
-            lambda: window.findFirstR(AXRole="AXTextField", AXTitle=element_id),
-            lambda: window.findFirstR(AXRole="AXStaticText", AXTitle=element_id),
-        ]
-        
-        for strategy in search_strategies:
-            try:
-                element = strategy()
-                if element:
-                    return element
-            except:
-                continue
-        
-        # Try searching in all windows if not found in front window
-        try:
-            all_windows = app.findAllR(AXRole="AXWindow")
-            for win in all_windows:
-                for strategy in search_strategies:
-                    try:
-                        element = strategy()
-                        if element:
-                            return element
-                    except:
-                        continue
-        except:
-            pass
-        
-        return None
+        return find_element_by_id(window, element_id=element_id)
         
     except Exception as e:
         print(f"Error finding element {element_id}: {e}")
@@ -219,28 +120,37 @@ def find_element(bundle_id: str = None, element_id: str = None) -> Optional[atom
 
 
 def press_element(element: atomacos.NativeUIElement) -> bool:
-    """
-    Press (click) a UI element.
-    
-    Args:
-        element: Atom instance of the element to press
-        
-    Returns:
-        True if successful, False otherwise
-    """
     try:
-        # Check if element has Press action
-        actions = element.getActions()
-        if 'Press' in actions:
-            element.Press()
-            return True
-        
-        # Try clicking if Press is not available
-        element.click()
-        return True
-        
-    except Exception as e:
-        print(f"Error pressing element: {e}")
+        current = element
+        visited = set()
+
+        while current:
+            if id(current) in visited:
+                break
+            visited.add(id(current))
+
+            try:
+                actions = current.getActions()
+            except Exception:
+                actions = []
+
+            for action in ("Press", "Open", "ShowMenu", "Raise", "PerformClick"):
+                if action in actions:
+                    try:
+                        getattr(current, action)()
+                        return True
+                    except Exception as e:
+                        if "-25205" in str(e):
+                            return True
+
+            try:
+                current = getattr(current, "AXParent", None)
+            except Exception:
+                current = None
+
+        return False
+
+    except Exception:
         return False
 
 
@@ -393,6 +303,34 @@ def scroll_window(bundle_id: str = None, direction: str = None, amount: int = 3)
         
     except Exception as e:
         print(f"Error scrolling window: {e}")
+        return False
+
+def start_app(bundle_id: str) -> bool:
+    try:
+        atomacos.launchAppByBundleId(bundle_id)
+        app = get_app_reference(bundle_id)
+        
+        return app is not None
+        
+    except Exception as e:
+        print(f"Failed to start app: {e}")
+        return False
+
+def focus_app(bundle_id: str) -> bool:
+    try:
+        app = get_app_reference(bundle_id)
+        if not app:
+            return False
+        
+        window = get_front_window(app)
+        if not window:
+            return False
+
+        window.activate()
+        return True
+        
+    except Exception as e:
+        print(f"Failed to focus app: {e}")
         return False
 
 
